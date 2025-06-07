@@ -1,10 +1,10 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "prisma-client-js"
 }
 
 model Account {
@@ -13,15 +13,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -36,23 +35,21 @@ model Session {
 
 model User {
   id            String    @id @default(cuid())
-  email         String    @unique
-  firstName     String
-  lastName      String
-  password      String?
-  role          String    @default("VIEWER")
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-  metadata      Json?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  createdBy     String?
-  updatedBy     String?
+  name          String?
+  email         String?   @unique
   emailVerified DateTime?
   image         String?
+  password      String?
+  firstName     String?
+  lastName      String?
+  role          String    @default("VIEWER")
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   accounts      Account[]
+  assets        asset[]
+  categories    category[]
   sessions      Session[]
-  assets        Asset[]
 }
 
 model VerificationToken {
@@ -63,20 +60,29 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model Asset {
+model category {
   id          String    @id @default(cuid())
-  name        String
-  category    String
-  status      String    @default("available")
-  assignedTo  String?
-  purchaseDate DateTime
-  value       Float
-  description String?   @db.Text
-  serialNumber String?
-  location    String?
+  name        String    @unique
+  description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  createdBy   String
+  createdBy   String?
   updatedBy   String?
-  user        User      @relation(fields: [createdBy], references: [id])
-} 
+  assets      asset[]
+  user        User?     @relation(fields: [createdBy], references: [id])
+}
+
+model asset {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  status      String    @default("active")
+  value       Float
+  categoryId  String
+  category    category  @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   String?
+  updatedBy   String?
+  user        User?     @relation(fields: [createdBy], references: [id])
+}

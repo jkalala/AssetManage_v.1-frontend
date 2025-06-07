@@ -1,19 +1,27 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "../auth/[...nextauth]/route"
-import { prisma } from '../../../../lib/prisma'
+import { PrismaClient } from '@prisma/client'
+import jwt from 'jsonwebtoken'
 import { headers } from 'next/headers'
+
+const prisma = new PrismaClient()
 
 // GET /api/categories - Get all categories
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
+    // Get authorization header
+    const headersList = await headers()
+    const authHeader = headersList.get('authorization')
     
-    if (!session?.user?.id) {
-      console.log('No valid session found in API route')
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Auth header:', authHeader)
+    }
+
+    // Validate authorization header
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('Invalid or missing authorization header')
       return new NextResponse(JSON.stringify({ 
-        error: 'Unauthorized - No valid session',
-        details: 'Session validation failed'
+        error: 'Unauthorized',
+        details: 'Missing or invalid authorization token'
       }), { 
         status: 401,
         headers: {
@@ -23,7 +31,23 @@ export async function GET() {
       })
     }
 
+    // Extract and verify token
+    const token = authHeader.split(' ')[1]
     try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+        id: string;
+        email: string;
+        role: string;
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Token verified for user:', {
+          id: decoded.id,
+          email: decoded.email,
+          role: decoded.role
+        })
+      }
+
       const categories = await prisma.category.findMany({
         orderBy: {
           name: 'asc'
@@ -34,16 +58,22 @@ export async function GET() {
           }
         }
       })
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Found ${categories.length} categories`)
+      }
+
       return NextResponse.json(categories)
-    } catch (dbError) {
-      console.error('Database error:', dbError)
+    } catch (jwtError) {
+      console.error('JWT verification failed:', jwtError)
       return new NextResponse(JSON.stringify({ 
-        error: 'Database error',
-        details: dbError instanceof Error ? dbError.message : 'Unknown database error'
+        error: 'Unauthorized',
+        details: 'Invalid token'
       }), { 
-        status: 500,
+        status: 401,
         headers: {
           'Content-Type': 'application/json',
+          'WWW-Authenticate': 'Bearer'
         },
       })
     }
@@ -64,11 +94,15 @@ export async function GET() {
 // POST /api/categories - Create a new category
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    // Get authorization header
+    const headersList = await headers()
+    const authHeader = headersList.get('authorization')
+
+    // Validate authorization header
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new NextResponse(JSON.stringify({ 
-        error: 'Unauthorized - No valid session',
-        details: 'Session validation failed'
+        error: 'Unauthorized',
+        details: 'Missing or invalid authorization token'
       }), { 
         status: 401,
         headers: {
@@ -78,13 +112,34 @@ export async function POST(request: Request) {
       })
     }
 
+    // Extract and verify token
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+      id: string;
+      email: string;
+      role: string;
+    }
+
     const data = await request.json()
     
+    // Validate required fields
+    if (!data.name) {
+      return new NextResponse(JSON.stringify({ 
+        error: 'Bad Request',
+        details: 'Category name is required'
+      }), { 
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }
+
     const category = await prisma.category.create({
       data: {
         name: data.name,
         description: data.description,
-        createdBy: session.user.id
+        createdBy: decoded.id
       }
     })
 
@@ -106,11 +161,15 @@ export async function POST(request: Request) {
 // PUT /api/categories/:id - Update a category
 export async function PUT(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    // Get authorization header
+    const headersList = await headers()
+    const authHeader = headersList.get('authorization')
+
+    // Validate authorization header
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new NextResponse(JSON.stringify({ 
-        error: 'Unauthorized - No valid session',
-        details: 'Session validation failed'
+        error: 'Unauthorized',
+        details: 'Missing or invalid authorization token'
       }), { 
         status: 401,
         headers: {
@@ -118,6 +177,14 @@ export async function PUT(request: Request) {
           'WWW-Authenticate': 'Bearer'
         },
       })
+    }
+
+    // Extract and verify token
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+      id: string;
+      email: string;
+      role: string;
     }
 
     const { searchParams } = new URL(request.url)
@@ -142,7 +209,7 @@ export async function PUT(request: Request) {
       data: {
         name: data.name,
         description: data.description,
-        updatedBy: session.user.id
+        updatedBy: decoded.id
       }
     })
 
@@ -164,11 +231,15 @@ export async function PUT(request: Request) {
 // DELETE /api/categories/:id - Delete a category
 export async function DELETE(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    // Get authorization header
+    const headersList = await headers()
+    const authHeader = headersList.get('authorization')
+
+    // Validate authorization header
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new NextResponse(JSON.stringify({ 
-        error: 'Unauthorized - No valid session',
-        details: 'Session validation failed'
+        error: 'Unauthorized',
+        details: 'Missing or invalid authorization token'
       }), { 
         status: 401,
         headers: {
@@ -176,6 +247,14 @@ export async function DELETE(request: Request) {
           'WWW-Authenticate': 'Bearer'
         },
       })
+    }
+
+    // Extract and verify token
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+      id: string;
+      email: string;
+      role: string;
     }
 
     const { searchParams } = new URL(request.url)
